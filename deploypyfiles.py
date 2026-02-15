@@ -1,5 +1,6 @@
 import sys
 from ast import literal_eval
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from itertools import chain
@@ -9,7 +10,7 @@ from shutil import rmtree
 from string import printable
 from subprocess import run
 from tomllib import loads
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 REPORT_CONFIG = True
 PACKAGE_NAME = "deploypyfiles"
@@ -21,7 +22,7 @@ def main(*opts: str) -> int:
     assert not opts
     config_path = find_file(Path(), "pyproject.toml")
     if config_path is None:
-        raise ValueError(f"pyproject.toml not found")
+        raise ValueError("pyproject.toml not found")
     root = config_path.parent
     project_config = loads(config_path.read_text("utf-8", "strict"))
     config = Config.from_dict(root, subdict(project_config, "tool", PACKAGE_NAME))
@@ -38,10 +39,11 @@ def main(*opts: str) -> int:
     return 0 if success else 1
 
 
-def deploy(prj: Config) -> None:
+def deploy(prj: Config) -> bool:
     tprint("# Deploying time!")
     if not prj.targets:
         eprint("No destinations specified, nowhere to deploy :(")
+    success = True
     for destination_root in prj.targets:
         print(f"Deploying to {destination_root}")
         resolved_destination = destination_root.resolve()
@@ -50,8 +52,8 @@ def deploy(prj: Config) -> None:
             destination_root = resolved_destination
         for source, destination in find_deployables(prj.root / path for path in prj.sources):
             destination = destination_root / destination
-            deploy_file(prj, source, destination)
-    return None
+            success |= deploy_file(prj, source, destination)
+    return success
 
 
 def deploy_file(prj: Config, main_path: Path, destination: Path) -> bool:
@@ -87,6 +89,14 @@ def deploy_file(prj: Config, main_path: Path, destination: Path) -> bool:
                 dest = dest.with_stem(main_destination.stem)
             if dest not in mapping:
                 mapping[dest] = source
+    anything_updated = copy_files(prj, mapping)
+    if not prj.archive or not anything_updated:
+        return True
+    archive_files(prj, destination_root, mapping)
+    return True
+
+
+def copy_files(config: Config, mapping: dict[Path, Path]) -> bool:
     anything_updated = False
     for dest, source in mapping.items():
         if dest.is_file():
@@ -99,21 +109,23 @@ def deploy_file(prj: Config, main_path: Path, destination: Path) -> bool:
             action = "error"
         else:
             action = "new"
-        if action == "new" or action == "update":
+        if action in ("new", "update"):
             dest.write_bytes(source.read_bytes())
             anything_updated = True
         sign = {"new": "+", "update": "u", "error": "?", None: " "}[action]
-        message = " ".join(map(str, [sign, source.relative_to(prj.root.parent), "->", dest]))
+        message = " ".join(map(str, [sign, source.relative_to(config.root.parent), "->", dest]))
         if sign in "+u":
             gprint(message)
         elif sign in "?":
             eprint(message)
         else:
             print(message)
-    if not prj.archive or not anything_updated:
-        return True
+    return anything_updated
+
+
+def archive_files(config: Config, destination_root: Path, mapping: dict[Path, Path]) -> None:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    for archive in prj.archive:
+    for archive in config.archive:
         archive_path = destination_root / archive / today
         rmtree(archive_path, ignore_errors=True)
         archive_path.mkdir(exist_ok=True, parents=True)
@@ -121,7 +133,6 @@ def deploy_file(prj: Config, main_path: Path, destination: Path) -> bool:
             dest = archive_path / dest.relative_to(destination_root)
             dest.write_bytes(source.read_bytes())
         gprint(" ", f"Archived to {archive_path}")
-    return True
 
 
 def find_deployables(
@@ -134,7 +145,7 @@ def find_deployables(
                 guess_destination=False,
             )
             continue
-        elif not path.is_file():
+        if not path.is_file():
             continue
         lines = path.read_text("utf8", "ignore").splitlines()
         if path.suffix != ".py" and not any(
@@ -189,65 +200,28 @@ class Config:
         return "\n".join(config)
 
 
-# TODO
-# @dataclass (SourceFile): destinaton...
+# TODO @dataclass (SourceFile): destinaton...
 # and in TOML: sources = ["path1", {source="path2", destination="path3"}]
 # In source we expect DEPLOYMENT_DESTIONATION = "some-path"
 
 
-def run_tests(root: Path, tests: str | list[str] | list[list[str]]) -> list[str]:
+def run_tests(root: Path, tests: list[str] | list[list[str]]) -> list[str]:
     errors = []
     for test in [tests] if isinstance(tests, str) else tests:
         cmd = test.split() if isinstance(test, str) else test
         if cmd[0].endswith(".py"):
             cmd = ["python"] + cmd
         tprint("> " + " ".join(cmd))
-        if run(cmd, cwd=root, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr).returncode:
+        if run(
+            cmd,
+            cwd=root,
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            check=False,
+        ).returncode:
             errors.append("> " + " ".join(cmd))
     return errors
-
-
-def deploy_script(
-    root: Path,
-    source_path: Path,
-    target_root: Path,
-    template: Path | None = None,
-    archive: str | None = None,
-) -> None:
-    print(">", source_path.relative_to(root.parent), "->", target_root)
-    source_root = source_path.parent
-    source_paths = [source_path] + get_dependencies(source_path)
-    targets = {target_root / path.relative_to(source_root): path for path in source_paths}
-    targets = {
-        t.with_stem(target_root.stem) if t.stem == source_path.stem else t: s
-        for t, s in targets.items()
-    }
-    if isinstance(template, Path):
-        for path in iterdir(template):
-            target_path = target_root / path.relative_to(template)
-            if path.stem == "TARGET":
-                target_path = target_path.with_stem(target_root.stem)
-            elif path.name == "requirements.txt" and Path(root, "requirements.txt").is_file():
-                path = Path(root, "requirements.txt")
-            if target_path not in targets:
-                targets[target_path] = path
-    updated = False
-    for target_path, source_path in targets.items():
-        print(" ", source_path.relative_to(root.parent), "->", target_path)
-        if target_path.is_file() and target_path.read_bytes() == source_path.read_bytes():
-            continue
-        target_path.write_bytes(source_path.read_bytes())
-        updated = True
-    if not archive or not updated:
-        return
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    archive_path = target_root / archive / today
-    print(" ", f"Archived to {archive_path}")
-    rmtree(archive_path, ignore_errors=True)
-    archive_path.mkdir(exist_ok=True, parents=True)
-    for target_path, source_path in targets.items():
-        target_path = archive_path / target_path.relative_to(target_root)
-        target_path.write_bytes(source_path.read_bytes())
 
 
 def get_dependencies(path: Path) -> list[Path]:
@@ -257,7 +231,8 @@ def get_dependencies(path: Path) -> list[Path]:
         stubfile = path.with_suffix(".pyi")
         if stubfile.exists():
             deps[stubfile] = path.stem
-    for path in queue:
+    while queue:
+        path = queue.pop(0)
         for line in path.read_text("utf-8", "strict").splitlines():
             line = line.strip()
             if not line.startswith("import ") and not line.startswith("from "):
@@ -270,9 +245,9 @@ def get_dependencies(path: Path) -> list[Path]:
     return list(deps.keys())
 
 
-def find_file(path: Path, name: str) -> Path | None:
-    path = path.resolve()
-    for path in chain([path], path.parents):
+def find_file(root: Path, name: str) -> Path | None:
+    root = root.resolve()
+    for path in chain([root], root.parents):
         path = Path(path, name)
         if path.exists():
             return path
@@ -280,21 +255,23 @@ def find_file(path: Path, name: str) -> Path | None:
 
 
 def tomlify(obj: object) -> str:
+    lst: list[object]
+    mapping: dict[str, object]
     match obj:
-        case list(elements):
-            return "[" + ", ".join(map(tomlify, elements)) + "]"
-        case dict(mapping):
-            elements: list[str] = []
+        case list() as lst:
+            return "[" + ", ".join(map(tomlify, lst)) + "]"
+        case dict() as mapping:
+            items: list[str] = []
             for key, value in mapping.items():
                 assert isinstance(key, str) and all(ch in IDENTIFIER_CHARS for ch in key)
-                elements.append(f"{key} = {tomlify(value)}")
-            return "{" + ", ".join(elements) + "}"
-        case path if isinstance(path, Path):
+                items.append(f"{key} = {tomlify(value)}")
+            return "{" + ", ".join(items) + "}"
+        case Path() as path:
             string = str(path)
             return f"'{string}'" if "'" not in string else tomlify(string)
-        case str(string):
+        case str() as string:
             return dumps(string, ensure_ascii=False)
-        case int(number) | float(number):
+        case float() as number:
             return str(number)
         case obj:
             raise NotImplementedError(f"tomlify({obj!r})")
