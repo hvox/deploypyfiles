@@ -28,6 +28,7 @@ def main(*opts: str) -> int:
     config = Config.from_dict(root, subdict(project_config, "tool", PACKAGE_NAME))
     if REPORT_CONFIG:
         tprint(f"Using config file {config_path}")
+        print(f"[tool.{PACKAGE_NAME}]")
         print(f"{config.to_toml()}\n")
     else:
         print(f"Using config file {config_path}")

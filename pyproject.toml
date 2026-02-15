@@ -16,7 +16,6 @@ keywords = ["deploy", "tool"]
 classifiers = [
   "Environment :: Console",
   "Intended Audience :: Developers",
-  "License :: Public Domain",
   "Topic :: Software Development :: Build Tools",
   "Topic :: Utilities",
   "Typing :: Typed",
@@ -30,4 +29,7 @@ Repository = "https://github.com/hvox/deploypyfiles"
 # Changelog = "https://github.com/hvox/deploypyfiles/blob/main/changelog.md"
 
 [project.scripts]
-spam-cli = "deploypyfiles:main"
+deploypyfiles = "deploypyfiles:main"
+
+[tool.deploypyfiles]
+deployables = ['deploypyfiles.py']
