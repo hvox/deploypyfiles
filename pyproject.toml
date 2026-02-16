@@ -11,11 +11,14 @@ maintainers = [
 ]
 description = "Copy Python scripts from working directory to specified locations"
 readme = "readme.md"
-license = "WTFPL"
+license = "MIT"
+license-files = ["license"]
 keywords = ["deploy", "tool"]
 classifiers = [
   "Environment :: Console",
   "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
   "Topic :: Software Development :: Build Tools",
   "Topic :: Utilities",
   "Typing :: Typed",
