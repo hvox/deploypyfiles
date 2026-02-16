@@ -86,7 +86,7 @@ def deploy_file(prj: Config, main_path: Path, destination: Path) -> bool:
         template_root = template.resolve()
         for source in iterdir(template_root):
             dest = destination_root / source.relative_to(template_root)
-            if source.stem == main_path.stem:
+            if source.stem in (main_path.stem, "FILESTEM"):
                 dest = dest.with_stem(main_destination.stem)
             if dest not in mapping:
                 mapping[dest] = source
