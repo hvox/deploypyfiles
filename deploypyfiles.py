@@ -196,7 +196,7 @@ class Config:
             "prerequisites = " + tomlify(self.preship),
             "deployables = " + tomlify(self.sources),
             "destinations = " + tomlify(self.targets),
-            "archive = " + tomlify(self.archive),
+            "archives = " + tomlify(self.archive),
         ]
         return "\n".join(config)
 
