@@ -112,6 +112,8 @@ def copy_files(config: Config, mapping: dict[Path, Path]) -> bool:
         else:
             action = "new"
         if action in ("new", "update"):
+            if action == "new":
+                dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(source.read_bytes())
             anything_updated = True
         sign = {"new": "+", "update": "u", "error": "?", None: " "}[action]
@@ -133,6 +135,7 @@ def archive_files(config: Config, destination_root: Path, mapping: dict[Path, Pa
         archive_path.mkdir(exist_ok=True, parents=True)
         for dest, source in mapping.items():
             dest = archive_path / dest.relative_to(destination_root)
+            dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(source.read_bytes())
         gprint(" ", f"Archived to {archive_path}")
 
@@ -236,13 +239,15 @@ def get_dependencies(path: Path) -> list[Path]:
         path = queue.pop(0)
         for line in path.read_text("utf-8", "strict").splitlines():
             line = line.strip()
-            if not line.startswith("import ") and not line.startswith("from "):
-                continue
-            mod_name = line.split()[1]
-            mod_path = path.parent / f"{mod_name}.py"
-            if mod_path.is_file() and mod_path not in deps:
-                deps[mod_path] = mod_name
-                queue.append(mod_path)
+            if line.startswith("import ") or line.startswith("from "):
+                mod_name = line.split()[1]
+                mod_path = path.parent / f"{mod_name}.py"
+                if mod_path.is_file() and mod_path not in deps:
+                    deps[mod_path] = mod_name
+                    queue.append(mod_path)
+            elif " = Path(__file__).parent / " in line:
+                path = Path(path.parent, literal_eval(line.split("/", 1)[1]))
+                deps[path] = line.split()[0]
     return list(deps.keys())
 
 
