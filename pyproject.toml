@@ -1,18 +1,17 @@
 [project]
 name = "deploypyfiles"
-version = "0.0.2"
-dependencies = []
-requires-python = ">=3.14"
-authors = [
-  {name = "Uladzislau Khamkou", email = "kham@tuta.io"},
-]
-maintainers = [
-  {name = "Uladzislau Khamkou", email = "kham@tuta.io"},
-]
+version = "0.0.3"
 description = "Copy Python scripts from working directory to specified locations"
 readme = "readme.md"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["license"]
+authors = [
+  { name = "Uladzislau Khamkou", email = "kham@tuta.io" },
+]
+maintainers = [
+  { name = "Uladzislau Khamkou", email = "kham@tuta.io" },
+]
 keywords = ["deploy", "tool"]
 classifiers = [
   "Environment :: Console",
@@ -23,16 +22,17 @@ classifiers = [
   "Topic :: Utilities",
   "Typing :: Typed",
 ]
+dependencies = []
 
 [project.urls]
+"Bug Tracker" = "https://github.com/hvox/deploypyfiles/issues"
 Homepage = "https://github.com/hvox/deploypyfiles/blob/main/readme.md"
 # Documentation = "https://readthedocs.org"
 Repository = "https://github.com/hvox/deploypyfiles"
-"Bug Tracker" = "https://github.com/hvox/deploypyfiles/issues"
 # Changelog = "https://github.com/hvox/deploypyfiles/blob/main/changelog.md"
 
 [project.scripts]
 deploypyfiles = "deploypyfiles:main"
 
 [tool.deploypyfiles]
-deployables = ['deploypyfiles.py']
+deployables = ["deploypyfiles.py"]
