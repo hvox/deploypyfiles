@@ -12,6 +12,7 @@ from subprocess import run
 from tomllib import loads
 from typing import Any
 
+
 REPORT_CONFIG = True
 PACKAGE_NAME = "deploypyfiles"
 PYTHON_SHEBANGS = ["#!/usr/bin/env python"]
@@ -83,7 +84,7 @@ def deploy_file(prj: Config, main_path: Path, destination: Path) -> bool:
             return False
         mapping[dest] = source
     if template := prj.templates.get("DEFAULT"):
-        template_root = template.resolve()
+        template_root = Path(prj.root, template).resolve()
         for source in iterdir(template_root):
             dest = destination_root / source.relative_to(template_root)
             if source.stem in (main_path.stem, "FILESTEM"):
@@ -154,10 +155,9 @@ def find_deployables(
         ):
             continue
         destination = None
-        for line in lines[:5]:
+        for line in lines[:10]:
             if line.startswith("DEPLOY_TARGET = ") or line.startswith("DEPLOYMENT_DESTINATION = "):
                 destination = literal_eval(line.split(" = ", 1)[1])
-                break
         if destination is not None:
             yield (path, Path(destination))
         elif guess_destination:
