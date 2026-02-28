@@ -47,6 +47,8 @@ def deploy(prj: Config) -> bool:
         eprint("No destinations specified, nowhere to deploy :(")
     success = True
     for destination_root in prj.targets:
+        if not destination_root.is_absolute():
+            destination_root = prj.root / destination_root
         print(f"Deploying to {destination_root}")
         resolved_destination = destination_root.resolve()
         if str(resolved_destination) != str(destination_root):
