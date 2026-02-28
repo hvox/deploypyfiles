@@ -1,6 +1,6 @@
 [project]
 name = "deploypyfiles"
-version = "0.0.3"
+version = "0.0.4"
 description = "Copy Python scripts from working directory to specified locations"
 readme = "readme.md"
 requires-python = ">=3.14"
