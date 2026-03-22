@@ -214,10 +214,12 @@ class Config:
 def run_tests(root: Path, tests: list[str] | list[list[str]]) -> list[str]:
     errors = []
     for test in [tests] if isinstance(tests, str) else tests:
-        cmd = test.split() if isinstance(test, str) else test
+        cmd = test.split() if isinstance(test, str) else test.copy()
         if cmd[0].endswith(".py"):
             cmd = ["python"] + cmd
         tprint("> " + " ".join(cmd))
+        if cmd[0] == "python":
+            cmd[0] = sys.executable
         if run(
             cmd,
             cwd=root,
