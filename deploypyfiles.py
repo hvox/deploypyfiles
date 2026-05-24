@@ -168,6 +168,8 @@ def find_deployables(
         for line in lines[:10]:
             if line.startswith("DEPLOY_TARGET = ") or line.startswith("DEPLOYMENT_DESTINATION = "):
                 destination = literal_eval(line.split(" = ", 1)[1])
+            elif line.startswith("# DESTINATION: "):
+                destination = line.removeprefix("# DESTINATION: ")
         if destination is not None:
             yield (path, Path(destination))
         elif guess_destination:
@@ -242,7 +244,6 @@ class Config:
 
 # TODO @dataclass (SourceFile): destinaton...
 # and in TOML: sources = ["path1", {source="path2", destination="path3"}]
-# In source we expect DEPLOYMENT_DESTIONATION = "some-path"
 
 
 def run_tests(root: Path, tests: list[str] | list[list[str]]) -> list[str]:
