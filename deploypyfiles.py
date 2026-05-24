@@ -174,6 +174,8 @@ def find_deployables(
             yield (path, path.relative_to(path.parent))
 
 
+# TODO: split that thing to Context and Config classes
+# maybe I should use contextvars for root and src...
 @dataclass
 class Config:
     root: Path
@@ -194,6 +196,8 @@ class Config:
         if self._backup_dirs is None:
             backup_dirs = []
             for path in self.backups:
+                if not path.is_absolute():
+                    path = self.root / path
                 path = path / f"{now}"
                 path.mkdir(parents=True, exist_ok=True)
                 backup_dirs.append(path)
