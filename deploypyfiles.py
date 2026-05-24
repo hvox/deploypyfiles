@@ -12,7 +12,6 @@ from subprocess import run
 from tomllib import loads
 from typing import Any
 
-
 REPORT_CONFIG = True
 PACKAGE_NAME = "deploypyfiles"
 PYTHON_SHEBANGS = ["#!/usr/bin/env python"]
@@ -44,7 +43,7 @@ def main(*opts: str) -> int:
 def deploy(prj: Config) -> bool:
     tprint("# Deploying time!")
     if not prj.targets:
-        eprint("No destinations specified, nowhere to deploy :(")
+        eprint("No destinations specified, I don't know where to deploy >.<")
     success = True
     for destination_root in prj.targets:
         if not destination_root.is_absolute():
@@ -93,14 +92,14 @@ def deploy_file(prj: Config, main_path: Path, destination: Path) -> bool:
                 dest = dest.with_stem(main_destination.stem)
             if dest not in mapping:
                 mapping[dest] = source
-    anything_updated = copy_files(prj, mapping)
+    anything_updated = copy_files(prj, destination_root, mapping)
     if not prj.archive or not anything_updated:
         return True
     archive_files(prj, destination_root, mapping)
     return True
 
 
-def copy_files(config: Config, mapping: dict[Path, Path]) -> bool:
+def copy_files(config: Config, destination_root: Path, mapping: dict[Path, Path]) -> bool:
     anything_updated = False
     for dest, source in mapping.items():
         if dest.is_file():
@@ -116,6 +115,7 @@ def copy_files(config: Config, mapping: dict[Path, Path]) -> bool:
         if action in ("new", "update"):
             if action == "new":
                 dest.parent.mkdir(parents=True, exist_ok=True)
+            backup_file(config, destination_root, dest)
             dest.write_bytes(source.read_bytes())
             anything_updated = True
         sign = {"new": "+", "update": "u", "error": "?", None: " "}[action]
@@ -127,6 +127,11 @@ def copy_files(config: Config, mapping: dict[Path, Path]) -> bool:
         else:
             print(message)
     return anything_updated
+
+
+def backup_file(config: Config, root: Path, path: Path) -> None:
+    for backup_dir in config.backup_dirs:
+        (backup_dir / path.relative_to(root)).write_bytes(path.read_bytes())
 
 
 def archive_files(config: Config, destination_root: Path, mapping: dict[Path, Path]) -> None:
@@ -179,6 +184,21 @@ class Config:
     sources: list[Path]
     targets: list[Path]
     archive: list[Path]
+    backups: list[Path]
+
+    _backup_dirs: list[Path] | None = None
+
+    @property
+    def backup_dirs(self) -> list[Path]:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if self._backup_dirs is None:
+            backup_dirs = []
+            for path in self.backups:
+                path = path / f"{now}"
+                path.mkdir(parents=True, exist_ok=True)
+                backup_dirs.append(path)
+            self._backup_dirs = backup_dirs
+        return self.backup_dirs
 
     @staticmethod
     def from_dict(root: Path, config: dict[str, Any]) -> Config:
@@ -189,10 +209,19 @@ class Config:
         sources = [Path(str(path)) for path in config.get("deployables", sources)]
         targets = [Path(str(path)) for path in config.get("destinations", [".."])]
         archive = [Path(str(path)) for path in config.get("archives", [])]
+        backups = [Path(str(path)) for path in config.get("backups", [])]
         for key in config:
-            if key not in {"templates", "prerequisites", "deployables", "destinations", "archives"}:
+            # TODO: fields
+            if key not in {
+                "templates",
+                "prerequisites",
+                "deployables",
+                "destinations",
+                "archives",
+                "backups",
+            }:
                 eprint(f"Encountered unsupported key {key!r} in pyproject.toml")
-        return Config(root, src_dir, templs, preship, sources, targets, archive)
+        return Config(root, src_dir, templs, preship, sources, targets, archive, backups)
 
     def to_toml(self) -> str:
         # TODO: fields
@@ -202,6 +231,7 @@ class Config:
             "deployables = " + tomlify(self.sources),
             "destinations = " + tomlify(self.targets),
             "archives = " + tomlify(self.archive),
+            "backups = " + tomlify(self.backups),
         ]
         return "\n".join(config)
 
