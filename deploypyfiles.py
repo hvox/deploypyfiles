@@ -53,7 +53,7 @@ def deploy(prj: Config) -> bool:
         if str(resolved_destination) != str(destination_root):
             print(f"which is aka {resolved_destination}")
             destination_root = resolved_destination
-        for source, destination in find_deployables(prj.root / path for path in prj.sources):
+        for source, destination in find_deployables(prj, (prj.root / path for path in prj.sources)):
             destination = destination_root / destination
             success |= deploy_file(prj, source, destination)
     return success
@@ -148,12 +148,13 @@ def archive_files(config: Config, destination_root: Path, mapping: dict[Path, Pa
 
 
 def find_deployables(
-    paths: Iterable[Path], guess_destination: bool = True
+    config: Config, paths: Iterable[Path], guess_destination: bool = True
 ) -> Iterator[tuple[Path, Path]]:
     for path in paths:
         if path.is_dir():
             yield from find_deployables(
-                (path for path in path.iterdir() if path.name[0] not in "._"),
+                config=config,
+                paths=(path for path in path.iterdir() if path.name[0] not in "._"),
                 guess_destination=False,
             )
             continue
@@ -164,15 +165,15 @@ def find_deployables(
             lines[0].startswith(shebang) for shebang in PYTHON_SHEBANGS
         ):
             continue
-        destination = None
+        destinations: list[str] = []
         for line in lines[:10]:
             if line.startswith("DEPLOY_TARGET = ") or line.startswith("DEPLOYMENT_DESTINATION = "):
-                destination = literal_eval(line.split(" = ", 1)[1])
+                destinations.append(literal_eval(line.split(" = ", 1)[1]))
             elif line.startswith("# DESTINATION: "):
-                destination = line.removeprefix("# DESTINATION: ")
-        if destination is not None:
+                destinations.append(line.removeprefix("# DESTINATION: "))
+        for destination in destinations:
             yield (path, Path(destination))
-        elif guess_destination:
+        if not destinations and guess_destination:
             yield (path, path.relative_to(path.parent))
 
 
