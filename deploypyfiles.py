@@ -16,6 +16,7 @@ REPORT_CONFIG = True
 PACKAGE_NAME = "deploypyfiles"
 PYTHON_SHEBANGS = ["#!/usr/bin/env python"]
 IDENTIFIER_CHARS = printable[:62] + "_"
+DESTINATION_MARKER = "# DESTINATION: "
 
 
 def main(*opts: str) -> int:
@@ -103,7 +104,7 @@ def copy_files(config: Config, destination_root: Path, mapping: dict[Path, Path]
     anything_updated = False
     for dest, source in mapping.items():
         if dest.is_file():
-            if dest.read_bytes() == source.read_bytes():
+            if dest.read_bytes() == read_file(config, source):
                 action = None
             else:
                 action = "update"
@@ -116,7 +117,7 @@ def copy_files(config: Config, destination_root: Path, mapping: dict[Path, Path]
             if action == "new":
                 dest.parent.mkdir(parents=True, exist_ok=True)
             backup_file(config, destination_root, dest)
-            dest.write_bytes(source.read_bytes())
+            dest.write_bytes(read_file(config, source))
             anything_updated = True
         sign = {"new": "+", "update": "u", "error": "?", None: " "}[action]
         message = " ".join(map(str, [sign, source.relative_to(config.root.parent), "->", dest]))
@@ -143,7 +144,7 @@ def archive_files(config: Config, destination_root: Path, mapping: dict[Path, Pa
         for dest, source in mapping.items():
             dest = archive_path / dest.relative_to(destination_root)
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(source.read_bytes())
+            dest.write_bytes(read_file(config, source))
         gprint(" ", f"Archived to {archive_path}")
 
 
@@ -169,8 +170,8 @@ def find_deployables(
         for line in lines[:10]:
             if line.startswith("DEPLOY_TARGET = ") or line.startswith("DEPLOYMENT_DESTINATION = "):
                 destinations.append(literal_eval(line.split(" = ", 1)[1]))
-            elif line.startswith("# DESTINATION: "):
-                destinations.append(line.removeprefix("# DESTINATION: "))
+            elif line.startswith(DESTINATION_MARKER):
+                destinations.append(line.removeprefix(DESTINATION_MARKER))
         for destination in destinations:
             yield (path, Path(destination))
         if not destinations and guess_destination:
@@ -184,6 +185,7 @@ class Config:
     root: Path
     src: Path
 
+    file_header: str
     templates: dict[str, Path]
     preship: list[list[str]]
     sources: list[Path]
@@ -214,28 +216,42 @@ class Config:
         preship = [parse_command(cmd) for cmd in config.get("prerequisites", [])]
         sources = [src_dir.relative_to(root)]
         sources = [Path(str(path)) for path in config.get("deployables", sources)]
+        file_header = config.get("file_header", "")
         targets = [Path(str(path)) for path in config.get("destinations", [".."])]
         archive = [Path(str(path)) for path in config.get("archives", [])]
         backups = [Path(str(path)) for path in config.get("backups", [])]
         for key in config:
-            # TODO: fields
+            # TODO: implicit fields
             if key not in {
                 "templates",
                 "prerequisites",
                 "deployables",
+                "file_header",
                 "destinations",
                 "archives",
                 "backups",
             }:
                 eprint(f"Encountered unsupported key {key!r} in pyproject.toml")
-        return Config(root, src_dir, templs, preship, sources, targets, archive, backups)
+        # TODO: implicit fields
+        return Config(
+            root=root,
+            src=src_dir,
+            file_header=file_header,
+            templates=templs,
+            preship=preship,
+            sources=sources,
+            targets=targets,
+            archive=archive,
+            backups=backups,
+        )
 
     def to_toml(self) -> str:
-        # TODO: fields
+        # TODO: implicit fields
         config = [
             "templates = " + tomlify(self.templates),
             "prerequisites = " + tomlify(self.preship),
             "deployables = " + tomlify(self.sources),
+            "file_header = " + tomlify(self.file_header),
             "destinations = " + tomlify(self.targets),
             "archives = " + tomlify(self.archive),
             "backups = " + tomlify(self.backups),
@@ -298,6 +314,21 @@ def find_file(root: Path, name: str) -> Path | None:
         if path.exists():
             return path
     return None
+
+
+def read_file(config: Config, path: Path) -> bytes:
+    print("READ", path)
+    data = path.read_bytes()
+    if not config.file_header:
+        return data
+    lines = data.decode(errors="replace").splitlines()
+    encoded = "".join(line + "\n" for line in lines).encode()
+    if encoded != data:
+        return data
+    if lines[0].startswith(DESTINATION_MARKER):
+        lines[0] = config.file_header
+    encoded = "".join(line + "\n" for line in lines).encode()
+    return encoded
 
 
 def tomlify(obj: object) -> str:
