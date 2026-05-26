@@ -1,0 +1,7 @@
+[project]
+name = "deploypyfiles-testing-things"
+version = "0.0.0"
+classifiers = ["Testing :: Private"]
+
+[tool.deploypyfiles]
+file_header = "# -*- coding: utf-8 -*-"
