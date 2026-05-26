@@ -195,7 +195,7 @@ class Config:
 
     @property
     def backup_dirs(self) -> list[Path]:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
         if self._backup_dirs is None:
             backup_dirs = []
             for path in self.backups:
@@ -205,7 +205,7 @@ class Config:
                 path.mkdir(parents=True, exist_ok=True)
                 backup_dirs.append(path)
             self._backup_dirs = backup_dirs
-        return self.backup_dirs
+        return self._backup_dirs
 
     @staticmethod
     def from_dict(root: Path, config: dict[str, Any]) -> Config:
