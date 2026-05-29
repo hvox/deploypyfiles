@@ -116,7 +116,8 @@ def copy_files(config: Config, destination_root: Path, mapping: dict[Path, Path]
         if action in ("new", "update"):
             if action == "new":
                 dest.parent.mkdir(parents=True, exist_ok=True)
-            backup_file(config, destination_root, dest)
+            elif action == "update":
+                backup_file(config, destination_root, dest)
             dest.write_bytes(read_file(config, source))
             anything_updated = True
         sign = {"new": "+", "update": "u", "error": "?", None: " "}[action]
@@ -317,7 +318,6 @@ def find_file(root: Path, name: str) -> Path | None:
 
 
 def read_file(config: Config, path: Path) -> bytes:
-    print("READ", path)
     data = path.read_bytes()
     if not config.file_header:
         return data
