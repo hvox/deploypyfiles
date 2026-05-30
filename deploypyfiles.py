@@ -117,7 +117,7 @@ def copy_files(config: Config, destination_root: Path, mapping: dict[Path, Path]
             if action == "new":
                 dest.parent.mkdir(parents=True, exist_ok=True)
             elif action == "update":
-                backup_file(config, destination_root, dest)
+                backup_file(config, dest)
             dest.write_bytes(read_file(config, source))
             anything_updated = True
         sign = {"new": "+", "update": "u", "error": "?", None: " "}[action]
@@ -131,9 +131,13 @@ def copy_files(config: Config, destination_root: Path, mapping: dict[Path, Path]
     return anything_updated
 
 
-def backup_file(config: Config, root: Path, path: Path) -> None:
+def backup_file(config: Config, path: Path) -> None:
+    backup_counter = int(getattr(backup_file, "counter", 1))
+    # prefix = hex(hash(str(path)))[2:] + "_"
+    prefix = f"{backup_counter:03X}_"
     for backup_dir in config.backup_dirs:
-        (backup_dir / path.relative_to(root)).write_bytes(path.read_bytes())
+        (backup_dir / f"{prefix} {path.name}").write_bytes(path.read_bytes())
+    setattr(backup_file, "counter", backup_counter + 1)
 
 
 def archive_files(config: Config, destination_root: Path, mapping: dict[Path, Path]) -> None:
