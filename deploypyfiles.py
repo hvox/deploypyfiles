@@ -19,7 +19,8 @@ IDENTIFIER_CHARS = printable[:62] + "_"
 DESTINATION_MARKER = "# DESTINATION: "
 
 
-def main(*opts: str) -> int:
+def main(args: list[str]) -> int:
+    opts = args[1:]
     assert not opts
     config_path = find_file(Path(), "pyproject.toml")
     if config_path is None:
@@ -56,7 +57,7 @@ def deploy(prj: Config) -> bool:
             destination_root = resolved_destination
         for source, destination in find_deployables(prj, (prj.root / path for path in prj.sources)):
             destination = destination_root / destination
-            success |= deploy_file(prj, source, destination)
+            success = success and deploy_file(prj, source, destination)
     return success
 
 
@@ -202,7 +203,7 @@ class Config:
 
     @property
     def backup_dirs(self) -> list[Path]:
-        now = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+        now = datetime.now().strftime("%Y-%m-%d/%H-%M-%S")
         if self._backup_dirs is None:
             backup_dirs = []
             for path in self.backups:
@@ -306,7 +307,8 @@ def get_dependencies(path: Path) -> list[Path]:
                 if mod_path.is_file() and mod_path not in deps:
                     deps[mod_path] = mod_name
                     queue.append(mod_path)
-            elif " = Path(__file__).parent / " in line:
+            # TODO: fix false positives here
+            elif (" = Path(__file__).parent" + " / ") in line:
                 path = Path(path.parent, literal_eval(line.split("/", 1)[1]))
                 deps[path] = line.split()[0]
     return list(deps.keys())
@@ -401,4 +403,4 @@ def eprint(*values: object) -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(main(*sys.argv[1:]))
+    sys.exit(main(sys.argv))
