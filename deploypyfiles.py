@@ -1,8 +1,11 @@
+import sqlite3
 import sys
 from ast import literal_eval
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import cached_property
+from hashlib import sha3_256
 from itertools import chain
 from json import dumps
 from pathlib import Path
@@ -94,15 +97,33 @@ def deploy_file(prj: Config, main_path: Path, destination: Path) -> bool:
                 dest = dest.with_stem(main_destination.stem)
             if dest not in mapping:
                 mapping[dest] = source
-    anything_updated = copy_files(prj, destination_root, mapping)
+    anything_updated, success = copy_files(prj, destination_root, mapping)
+    if not success:
+        return False
     if not prj.archive or not anything_updated:
         return True
     archive_files(prj, destination_root, mapping)
     return True
 
 
-def copy_files(config: Config, destination_root: Path, mapping: dict[Path, Path]) -> bool:
+def copy_files(
+    config: Config, _destination_root: Path, mapping: dict[Path, Path]
+) -> tuple[bool, bool]:
     anything_updated = False
+    modifications_detected: list[Path] = []
+    for dest, source in mapping.items():
+        if (hsh := file_hash(dest)) and hsh != config.hashes.get_hash(dest):
+            modifications_detected.append(dest)
+            anything_updated = True
+    if modifications_detected:
+        message = "! Unauthorized modification detected in"
+        for path in modifications_detected:
+            eprint(f"{message} {path}")
+            message = " " * (len(message) - 3) + "and"
+    if anything_updated and input("Proceed with deployment? [y/N] ").lower().strip() != "y":
+        return False, False
+    anything_updated = False
+    everything_ok = True
     for dest, source in mapping.items():
         if dest.is_file():
             if dest.read_bytes() == read_file(config, source):
@@ -127,9 +148,12 @@ def copy_files(config: Config, destination_root: Path, mapping: dict[Path, Path]
             gprint(message)
         elif sign in "?":
             eprint(message)
+            everything_ok = False
         else:
             print(message)
-    return anything_updated
+        assert (new_hash := file_hash(dest))
+        config.hashes.set_hash(dest, new_hash)
+    return anything_updated, everything_ok
 
 
 def backup_file(config: Config, path: Path) -> None:
@@ -214,6 +238,10 @@ class Config:
                 backup_dirs.append(path)
             self._backup_dirs = backup_dirs
         return self._backup_dirs
+
+    @cached_property
+    def hashes(self) -> HashesDB:
+        return HashesDB(self)
 
     @staticmethod
     def from_dict(root: Path, config: dict[str, Any]) -> Config:
@@ -373,6 +401,59 @@ def parse_command(command: str | list[str]) -> list[str]:
     if isinstance(command, str):
         return command.split()
     return command
+
+
+APPLICATION_ID = 0x3F61508A
+
+
+class HashesDB:
+    VERSION: int = 1
+    connection: sqlite3.Connection
+
+    def __init__(self, config: Config):
+        path = config.root / ".cache/hashes.db"
+        if not path.is_file():
+            self.connection = HashesDB.create_database(path)
+            return
+        self.connection = sqlite3.connect(path)
+        application_id = self.connection.execute("pragma application_id").fetchone()[0]
+        user_version = self.connection.execute("pragma user_version").fetchone()[0]
+        assert application_id == APPLICATION_ID, application_id
+        assert user_version == HashesDB.VERSION, user_version
+
+    @staticmethod
+    def create_database(path: Path) -> sqlite3.Connection:
+        assert not path.exists()
+        path.parent.mkdir(exist_ok=True)
+        db = sqlite3.connect(path)
+        db.execute("create table file_hash (path text primary key, hash text) strict;").close()
+        db.execute(f"pragma application_id = {APPLICATION_ID};", ()).close()
+        db.execute(f"pragma user_version = {HashesDB.VERSION};", ()).close()
+        db.commit()
+        return db
+
+    def get_hash(self, path: Path) -> str | None:
+        if path_hash_entry := self.connection.execute(
+            "select hash from file_hash where path = ?",
+            (path.resolve().as_posix(),),
+        ).fetchone():
+            path_hash: str = path_hash_entry[0]
+            return path_hash
+        return None
+
+    def set_hash(self, path: Path, path_hash: str) -> None:
+        self.connection.execute(
+            "insert or replace into file_hash (path, hash) values (?, ?)",
+            (path.resolve().as_posix(), path_hash),
+        ).close()
+        self.connection.commit()
+
+
+def file_hash(path: Path) -> str | None:
+    try:
+        return sha3_256(path.read_bytes()).hexdigest()
+    except FileNotFoundError:
+        return None
 
 
 def iterdir(path: Path) -> list[Path]:
