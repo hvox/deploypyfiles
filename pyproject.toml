@@ -36,3 +36,6 @@ deploypyfiles = "deploypyfiles:main"
 
 [tool.deploypyfiles]
 deployables = ["deploypyfiles.py"]
+
+[tool.ruff]
+line-length = 100
