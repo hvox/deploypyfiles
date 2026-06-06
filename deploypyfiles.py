@@ -336,7 +336,7 @@ def get_dependencies(path: Path) -> list[Path]:
                     deps[mod_path] = mod_name
                     queue.append(mod_path)
             # TODO: fix false positives here
-            elif (" = Path(__file__).parent" + " / ") in line:
+            elif " = Path(__file__).parent" + " / " in line:
                 path = Path(path.parent, literal_eval(line.split("/", 1)[1]))
                 deps[path] = line.split()[0]
     return list(deps.keys())
