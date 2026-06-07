@@ -23,14 +23,15 @@ DESTINATION_MARKER = "# DESTINATION: "
 
 
 def main(args: list[str]) -> int:
-    opts = args[1:]
-    assert not opts
+    sources = list(map(Path, args[1:]))
     config_path = find_file(Path(), "pyproject.toml")
     if config_path is None:
         raise ValueError("pyproject.toml not found")
     root = config_path.parent
     project_config = loads(config_path.read_text("utf-8", "strict"))
     config = Config.from_dict(root, subdict(project_config, "tool", PACKAGE_NAME))
+    if sources:
+        config.sources = sources
     if REPORT_CONFIG:
         tprint(f"Using config file {config_path}")
         print(f"[tool.{PACKAGE_NAME}]")
