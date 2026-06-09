@@ -484,5 +484,9 @@ def eprint(*values: object) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
-if __name__ == "__main__":
+def _cli_main() -> None:
     sys.exit(main(sys.argv))
+
+
+if __name__ == "__main__":
+    _cli_main()

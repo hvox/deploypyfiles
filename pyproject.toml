@@ -32,7 +32,7 @@ Repository = "https://github.com/hvox/deploypyfiles"
 # Changelog = "https://github.com/hvox/deploypyfiles/blob/main/changelog.md"
 
 [project.scripts]
-deploypyfiles = "deploypyfiles:main"
+deploypyfiles = "deploypyfiles:_cli_main"
 
 [tool.deploypyfiles]
 deployables = ["deploypyfiles.py"]
