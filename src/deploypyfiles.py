@@ -113,7 +113,13 @@ def copy_files(
     anything_updated = False
     modifications_detected: list[Path] = []
     for dest, source in mapping.items():
-        if (hsh := file_hash(dest)) and hsh != config.hashes.get_hash(dest):
+        if (
+            (hsh := file_hash(dest))
+            and hsh != config.hashes.get_hash(dest)
+            and source.is_file()
+            and dest.is_file()
+            and read_file(config, source) != dest.read_bytes()
+        ):
             modifications_detected.append(dest)
             anything_updated = True
     if modifications_detected:
